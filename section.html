@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    :root {
+      --ink: #1d2125; --muted: #5e6c84; --box: #f4f3f1; --needed: #a14b00; --link: #0c66e4;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: transparent; }
+    #content { padding: 2px 2px 8px; }
+    h3 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 14px 0 8px; }
+    h3:first-child { margin-top: 0; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .box { background: var(--box); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+    .box.full { grid-column: 1 / -1; }
+    .label { font-size: 13px; color: var(--muted); margin-bottom: 3px; }
+    .value { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+    .value.needed { color: var(--needed); font-family: inherit; }
+    .value.empty { color: var(--muted); font-family: inherit; font-weight: 400; }
+    .value a { color: var(--link); text-decoration: none; }
+    .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+    @media (max-width: 360px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div id="content">Loading…</div>
+<script>
+  var t = TrelloPowerUp.iframe();
+
+  // Section layout. Each entry is a Custom Field name on the Jobs board.
+  var SECTIONS = [
+    { title: 'Job', fields: ['Client', 'Field Manager', 'Subcontractor', 'Scope Schedule', 'Scope Deadline', 'Access PDF', 'Scope'] },
+    { title: 'Inspection', fields: ['NavAI Link', 'NavAI Access Code'] },
+    { title: 'Property entry', fields: ['Mechanical Lockbox', 'Igloo Code'] },
+    { title: 'Flooring', fields: ['Flooring'], full: true }
+  ];
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function fmtDate(d) {
+    var opts = { month: '2-digit', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' };
+    return new Date(d).toLocaleString('en-US', opts) + ' ET';
+  }
+
+  function render(values) {
+    var html = '';
+    SECTIONS.forEach(function (sec) {
+      html += '<h3>' + esc(sec.title) + '</h3><div class="grid">';
+      sec.fields.forEach(function (name) {
+        var v = values[name];
+        var cls = 'value', shown;
+        if (v === undefined || v === null || v === '') {
+          cls += ' empty'; shown = 'Not provided';
+        } else if (/^needed$/i.test(String(v))) {
+          cls += ' needed'; shown = 'Needed';
+        } else if (/^https?:\/\//i.test(String(v))) {
+          shown = '<a href="' + esc(v) + '" target="_blank" rel="noopener">Open</a>';
+        } else {
+          shown = esc(v);
+        }
+        var full = sec.full || name === 'Access PDF' || name === 'Scope' || name === 'NavAI Link' || name === 'NavAI Access Code';
+        html += '<div class="box' + (full ? ' full' : '') + '"><div class="label">' + esc(name) +
+                '</div><div class="' + cls + '">' + shown + '</div></div>';
+      });
+      html += '</div>';
+    });
+    html += '<div class="note">Edit these values in Custom Fields on this card.</div>';
+    document.getElementById('content').innerHTML = html;
+    return t.sizeTo('#content');
+  }
+
+  function load() {
+    return Promise.all([t.board('customFields'), t.card('customFieldItems')]).then(function (res) {
+      var defs = res[0].customFields || [];
+      var items = res[1].customFieldItems || [];
+      var byId = {};
+      defs.forEach(function (d) { byId[d.id] = d; });
+      var values = {};
+      items.forEach(function (it) {
+        var d = byId[it.idCustomField];
+        if (!d) return;
+        var v = null;
+        if (d.type === 'list') {
+          var opt = (d.options || []).filter(function (o) { return o.id === it.idValue; })[0];
+          v = opt ? opt.value.text : null;
+        } else if (it.value) {
+          if (d.type === 'date' && it.value.date) v = fmtDate(it.value.date);
+          else if (d.type === 'checkbox') v = it.value.checked === 'true' ? 'Yes' : 'No';
+          else v = it.value.text || it.value.number || null;
+        }
+        values[d.name] = v;
+      });
+      // Scope Deadline is 48 hours after the scheduled scope date.
+      var sched = items.filter(function (it) { var d = byId[it.idCustomField]; return d && d.name === 'Scope Schedule'; })[0];
+      if (sched && sched.value && sched.value.date && !values['Scope Deadline']) {
+        values['Scope Deadline'] = fmtDate(new Date(sched.value.date).getTime() + 48 * 3600 * 1000);
+      }
+      return render(values);
+    });
+  }
+
+  t.render(load);
+</script>
+</body>
+</html>

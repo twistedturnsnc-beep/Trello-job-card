@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Twisted Turns Job Card</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+<script>
+  var ICON = 'https://cdn.jsdelivr.net/npm/@tabler/icons@2.47.0/icons/clipboard-list.svg';
+  TrelloPowerUp.initialize({
+    'card-back-section': function (t) {
+      return {
+        title: 'Job Card',
+        icon: ICON,
+        content: {
+          type: 'iframe',
+          url: t.signUrl('./section.html'),
+          height: 420
+        }
+      };
+    }
+  });
+</script>
+</body>
+</html>
