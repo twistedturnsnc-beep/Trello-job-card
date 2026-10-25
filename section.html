@@ -139,7 +139,7 @@
           html += '</div>';
         });
         if (job.notes) html += '<h3>Notes</h3><div class="note">' + esc(job.notes) + '</div>';
-        html += '<div class="bar"><button class="primary" id="edit">Edit job card</button></div>';
+        html = '<div class="bar" style="margin-top:0;margin-bottom:8px"><button class="primary" id="edit">Edit job card</button></div>' + html;
         return html;
       }
 
