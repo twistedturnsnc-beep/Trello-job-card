@@ -53,7 +53,7 @@
 
       // Every field the Job Card holds. type: text | date | list | notes
       var FIELDS = {
-        client:     { label: 'Client', type: 'list', options: ['Mynd', 'Ark'] },
+        client:     { label: 'Client', type: 'list', options: ['Mynd', 'Ark', 'J&B'] },
         fm:         { label: 'Field Manager', type: 'list', options: ['Ashley', 'Tyler'] },
         sub:        { label: 'Subcontractor', type: 'list', options: ['Alyssa', 'Pablo', 'Karen'] },
         received:   { label: 'Scoping Email Received', type: 'text' },
@@ -199,7 +199,10 @@
           // Dates are kept as noon UTC so they never shift a day in any time zone.
           next[k] = FIELDS[k].type === 'date' ? v + 'T12:00:00.000Z' : v;
         });
-        return t.set('card', 'shared', 'job', next).then(function () { job = next; editing = false; return draw(); });
+        // Remember what the description said at save time, so only later description changes win over these values.
+        return fromDescription().then(function (seen) {
+          return t.set('card', 'shared', { job: next, descSeen: seen });
+        }).then(function () { job = next; editing = false; return draw(); });
       }
 
       // Cards that have never been edited get their values from the card name and description.
@@ -215,7 +218,7 @@
           function date(v) { var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[1] + '-' + m[2] + 'T12:00:00.000Z' : ''; }
           var fm = (c.name || '').split('|')[0].trim();
           if (fm === 'Ashley' || fm === 'Tyler') out.fm = fm;
-          var client = line('Client'); if (client === 'Mynd' || client === 'Ark') out.client = client;
+          var client = line('Client'); if (client === 'Mynd' || client === 'Ark' || client === 'J&B') out.client = client;
           var rec = clean(line('Scoping Received')); if (rec) out.received = rec;
           var sched = date(line('Scheduled Scope')); if (sched) out.scopeDate = sched;
           var pdf = clean(line('Access PDF')); if (pdf) out.accessPdf = url(pdf);
@@ -236,12 +239,13 @@
 
       function load() {
         if (editing) return t.sizeTo('#content');
-        return t.get('card', 'shared', 'job').then(function (stored) {
+        return t.getAll().then(function (all) {
+          var sh = (all && all.card && all.card.shared) || {}, stored = sh.job || {}, seen = sh.descSeen || {};
           return Promise.all([fromDescription(), t.card('idList', 'checklists')]).then(function (r) {
-            // Saved values win; the description only fills in what was never entered.
+            // Saved values win, except where n8n or the email check wrote something new to the description since the last save.
             job = {};
-            Object.keys(r[0]).forEach(function (k) { job[k] = r[0][k]; });
-            Object.keys(stored || {}).forEach(function (k) { job[k] = stored[k]; });
+            Object.keys(stored).forEach(function (k) { job[k] = stored[k]; });
+            Object.keys(r[0]).forEach(function (k) { if (!(k in stored) || r[0][k] !== seen[k]) job[k] = r[0][k]; });
             card = r[1] || {};
             return draw();
           });
