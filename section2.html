@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script src="./migrate.js"></script>
     <style>
       :root { --ink:#172b4d; --muted:#5e6c84; --line:#ebecf0; --soft:#f7f8f9; --warm:#fff4e5; --needed:#a14b00; --link:#0c66e4; }
       * { box-sizing: border-box; }
@@ -237,9 +238,20 @@
         }).catch(function () { return {}; });
       }
 
+      // Cards from before the rollout move their old description into the Job Card the first time they are opened.
+      function migrateOnce() {
+        return Promise.all([t.getAll(), t.card('id', 'name', 'desc')]).then(function (r) {
+          var sh = (r[0] && r[0].card && r[0].card.shared) || {}, c = r[1] || {};
+          if (MIGRATE.indexOf(c.id) < 0 || sh.migrated || !(c.desc || '').trim()) return;
+          var next = descToJob(c.name, c.desc), job = sh.job || {};
+          Object.keys(job).forEach(function (k) { next[k] = job[k]; });
+          return t.set('card', 'shared', { job: next, migrated: 1 });
+        });
+      }
+
       function load() {
         if (editing) return t.sizeTo('#content');
-        return t.getAll().then(function (all) {
+        return migrateOnce().then(function () { return t.getAll(); }).then(function (all) {
           var sh = (all && all.card && all.card.shared) || {}, stored = sh.job || {}, seen = sh.descSeen || {};
           return Promise.all([fromDescription(), t.card('idList', 'checklists')]).then(function (r) {
             // Saved values win, except where n8n or the email check wrote something new to the description since the last save.
