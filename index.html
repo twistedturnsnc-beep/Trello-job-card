@@ -1,39 +1,56 @@
 <!doctype html>
 <html>
-  <head>
-      <meta charset="utf-8">
-      <title>Twisted Turns Job Card</title>
-    <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  </head>
+<head>
+  <meta charset="utf-8">
+  <title>Twisted Turns Job Card</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
 <body>
-  <script>
-      var ICON = 'https://cdn.jsdelivr.net/npm/@tabler/icons@2.47.0/icons/clipboard-list.svg';
+<script>
+  var ICON = 'https://cdn.jsdelivr.net/npm/@tabler/icons@2.47.0/icons/clipboard-list.svg';
+  var SCOPING = ['6ad41787807d5a5ea54c351f', '6adccd7dd196f31f3fcd9537']; // Scoping & Access, Waiting on Approval
+  var IN_PROGRESS = '6ad4178d04d73fb79ebe8a2c';
+  // Cards trying the new layout before it goes to every card.
+  var PRACTICE = ['6ad4d6fb96a94b01bea4d0ee']; // 2533 Provence Dr SE
 
-      function md(d) {
-            var x = new Date(d);
-            return (x.getUTCMonth() + 1 < 10 ? '0' : '') + (x.getUTCMonth() + 1) + '/' + (x.getUTCDate() < 10 ? '0' : '') + x.getUTCDate();
-      }
+  function md(d) {
+    var x = new Date(d);
+    return (x.getUTCMonth() + 1 < 10 ? '0' : '') + (x.getUTCMonth() + 1) + '/' + (x.getUTCDate() < 10 ? '0' : '') + x.getUTCDate();
+  }
+  // Reads "Label: MM/DD/YYYY" from a description that has not been moved into the Job Card yet.
+  function descDate(desc, label) {
+    var m = (desc || '').replace(/\*\*/g, '').match(new RegExp('^' + label + ':[ \\t]*(\\d{2})\\/(\\d{2})\\/(\\d{4})', 'mi'));
+    return m ? m[3] + '-' + m[1] + '-' + m[2] + 'T12:00:00.000Z' : '';
+  }
 
-      TrelloPowerUp.initialize({
-            'card-back-section': function (t) {
-                    return {
-                              title: 'Job Card',
-                              icon: ICON,
-                              content: { type: 'iframe', url: t.signUrl('./section.html'), height: 480 }
-                    };
-            },
-            // Small tags on the front of the card.
-            'card-badges': function (t) {
-                    return t.get('card', 'shared', 'job').then(function (job) {
-                              job = job || {};
-                              var out = [];
-                              if (job.scopeDate) out.push({ text: 'Scope ' + md(job.scopeDate), color: 'orange' });
-                              if (job.sub) out.push({ text: 'Sub: ' + job.sub, color: 'blue' });
-                              if (job.ecd) out.push({ text: 'ECD ' + md(job.ecd), color: 'green' });
-                              if (!job.accessPdf || /^needed$/i.test(job.accessPdf)) out.push({ text: 'Access PDF needed', color: 'red' });
-                              return out;
-                    });
-            }
+  TrelloPowerUp.initialize({
+    'card-back-section': function (t) {
+      return t.card('id').then(function (c) {
+        var page = PRACTICE.indexOf(c.id) >= 0 ? './section2.html' : './section.html';
+        return {
+          title: 'Job Card',
+          icon: ICON,
+          content: { type: 'iframe', url: t.signUrl(page), height: 480 }
+        };
       });
-  </script>
+    },
+    // One date on the front of the card: the scheduled scope while scoping, the ECD once in progress.
+    'card-badges': function (t) {
+      return Promise.all([t.get('card', 'shared', 'job'), t.card('id', 'idList', 'desc')]).then(function (r) {
+        var job = r[0] || {}, c = r[1] || {};
+        if (PRACTICE.indexOf(c.id) < 0) return [];
+        if (SCOPING.indexOf(c.idList) >= 0) {
+          var s = job.scopeDate || descDate(c.desc, 'Scheduled Scope');
+          return [{ text: s ? 'Scope ' + md(s) : 'Scope date needed', color: s ? 'orange' : 'red' }];
+        }
+        if (c.idList === IN_PROGRESS) {
+          var e = job.ecd || descDate(c.desc, 'ECD');
+          return [{ text: e ? 'ECD ' + md(e) : 'ECD needed', color: e ? 'green' : 'red' }];
+        }
+        return [];
+      });
+    }
+  });
+</script>
 </body>
+</html>
