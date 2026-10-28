@@ -14,7 +14,7 @@ var SUB_BOARDS = { '6ad83ff1e54e7e573993c604': 'Karen', '6ade9cecb1c486ba4e6e84c
 var SCOPING_ACCESS = '6ad41787807d5a5ea54c351f';
 var IN_PROGRESS = '6ad4178d04d73fb79ebe8a2c';
 // Practice cards that show the new layout before it goes to every card.
-var PRACTICE = ['6ad4d6fb96a94b01bea4d0ee', '6ad8f430200da064556b9454'];
+var PRACTICE = ['6ad4d6fb96a94b01bea4d0ee', '6ad8f430200da064556b9454', '6ad8f410befe8a03c4226cc2'];
 
 function md(d) {
 var x = new Date(d);
@@ -39,7 +39,7 @@ var board = r[0].id, card = r[1].id;
 if (SUB_BOARDS[board]) {
 return { title: SUB_BOARDS[board] + '’s Job', icon: ICON, content: { type: 'iframe', url: t.signUrl('./sub2.html'), height: 480 } };
 }
-var page = PRACTICE.indexOf(card) >= 0 ? './section4.html' : './section2.html';
+var page = PRACTICE.indexOf(card) >= 0 ? './section5.html' : './section2.html';
 return { title: 'Job Card', icon: ICON, content: { type: 'iframe', url: t.signUrl(page), height: 480 } };
 });
 },
