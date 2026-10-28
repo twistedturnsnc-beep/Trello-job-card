@@ -1,135 +1,74 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Twisted Turns Job Card</title>
-  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+<meta charset="utf-8">
+<title>Twisted Turns Job Card</title>
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script src="./migrate.js"></script>
 </head>
 <body>
 <script>
-  var ICON = 'https://cdn.jsdelivr.net/npm/@tabler/icons@2.47.0/icons/clipboard-list.svg';
-  var SCOPING_ACCESS = '6ad41787807d5a5ea54c351f';
-  var IN_PROGRESS = '6ad4178d04d73fb79ebe8a2c';
+var ICON = 'https://cdn.jsdelivr.net/npm/@tabler/icons@2.47.0/icons/clipboard-list.svg';
+var JOBS_BOARD = '6ad4177cbae2e4f1006a4efc';
+var SUB_BOARDS = { '6ad83ff1e54e7e573993c604': 'Karen', '6ade9cecb1c486ba4e6e84cb': 'Alyssa' };
+var SCOPING_ACCESS = '6ad41787807d5a5ea54c351f';
+var IN_PROGRESS = '6ad4178d04d73fb79ebe8a2c';
+// Practice cards that show the new layout before it goes to every card.
+var PRACTICE = ['6ad4d6fb96a94b01bea4d0ee', '6ad8f430200da064556b9454'];
 
-  // Cards whose old description is moved into the Job Card once (rollout on 10/27/2026).
-  var MIGRATE = ["6ad4d6b68efd803dde5c7a39", "6ad4d711fcb67f6b38b1d296", "6ad4d7181455f0e01aa7f768", "6ad517226446254fdafbf444", "6ad5172bd18773294d746f17", "6ad51732b52baaa8ea113ac0", "6ad8f410befe8a03c4226cc2", "6ad907ae35581dd02575a947", "6adcd0e1fbce0e58937014af", "6adcd102655154c432b02ab2", "6adcd1718d1197a0238ee294", "6adcd19d7e0d51537cf76965", "6adcd1d571e00631706f3419", "6adcd2159731eb657b379717", "6adcf369248fb7533404f214", "6adcf36ccaf12d0df5762e67", "6adcf36f57286595595a254c", "6adcf372553ef74c58731f3f", "6adcf375eab3de293f5565ab", "6adf7fb0443383079351d229", "6ae09f5ab78ac13b419bc308", "6ae09f5b43d2b7131660d370", "6adcd127f7622050b24dde37", "6ae09f53a93625a3c5f2a4f4", "6adcd0b1b3229d3971e990e0", "6ae09f54dee2d2d030445d06", "6ae09f551253b3757052a892", "6ae09f567d22f9fd9416b579", "6ae09f56e1489f150151dcaa", "6ae09f57dc4d292e711f2c9e", "6ae09f58bfa4db8e745e7ba9", "6ae09f59d7cbc3f7c0f46a71", "6ae09f5a415f48e2498fc4f3", "6adcf37980ee08c06ffa3cf5", "6ae0ed55db17e7347382f94e", "6ad920e5e05eccdc39990b28", "6ad9228750251eb5c148c94c", "6ad4d6f0968432ec8ed1c570", "6ad4d70c34f588fd10d3102a", "6ad8f430200da064556b9454", "6ad4d701ef2ed404584f55ce", "6ad4d70869edf265e8894e03", "6ad8f852009dc62edfd6c59d", "6ad4d6f66af5f6c90fb20039", "6ae09cb72763b817a6557f57"];
+function md(d) {
+var x = new Date(d);
+return (x.getUTCMonth() + 1 < 10 ? '0' : '') + (x.getUTCMonth() + 1) + '/' + (x.getUTCDate() < 10 ? '0' : '') + x.getUTCDate();
+}
+// Reads "Label: MM/DD/YYYY" from the card description.
+function descDate(desc, label) {
+var m = (desc || '').replace(/\*\*/g, '').match(new RegExp('^' + label + ':[ \\t]*(\\d{2})\\/(\\d{2})\\/(\\d{4})', 'mi'));
+return m ? m[3] + '-' + m[1] + '-' + m[2] + 'T12:00:00.000Z' : '';
+}
+// A date written to the description since the Job Card was last saved wins over the saved one.
+function pick(job, seen, desc, key, label) {
+var d = descDate(desc, label);
+if (d && (!job[key] || d !== seen[key])) return d;
+return job[key] || '';
+}
 
-  // One-time move of a card's old description into its Job Card. Every line is kept: known labels go to
-  // their fields and everything else goes to Notes.
-  function descToJob(name, desc) {
-    var PH = /^(not provided|needed)\b/i;
-    function url(v) { var m = v.match(/\((https?:\/\/[^\s)"]+)/) || v.match(/(https?:\/\/[^\s|)"\]]+)/); return m ? m[1] : v; }
-    function date(v) { var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[1] + '-' + m[2] + 'T12:00:00.000Z' : ''; }
-    var job = {}, notes = [], other = [];
-    var fm = (name || '').split('|')[0].trim();
-    if (fm === 'Ashley' || fm === 'Tyler') job.fm = fm;
-    var lines = (desc || '').replace(/\*\*/g, '').split('\n'), i = 0;
-    while (i < lines.length) {
-      var raw = lines[i].replace(/‌/g, '').replace(/\s+$/, ''); i++;
-      if (!raw.trim()) continue;
-      if (raw.indexOf('=== ') === 0 && raw.indexOf('=== End') !== 0) {
-        var title = raw.replace(/^=+\s*|\s*=+$/g, ''), body = [];
-        while (i < lines.length && lines[i].indexOf('=== End') !== 0) { if (lines[i].trim()) body.push(lines[i].trim()); i++; }
-        i++;
-        other.push(title + ': ' + body.join('; '));
-        continue;
-      }
-      var m = raw.match(/^([A-Za-z \/&()-]{2,40}?)\s*:\s*(.*)$/);
-      if (!m) { notes.push(raw.trim()); continue; }
-      var k = m[1].trim(), v = m[2].trim(), K = k.toLowerCase();
-      var empty = PH.test(v), rest = v.replace(/^(not provided|needed)\s*/i, '').trim(), dt;
-      if (K === 'client') job.client = v;
-      else if (K === 'scoping received') { if (!empty) job.received = v; }
-      else if (K === 'scheduled scope') { dt = date(v); if (dt) job.scopeDate = dt; else if (rest && rest !== '(check portal)') notes.push('Scheduled scope: ' + v); }
-      else if (K === 'scope deadline') { if (!empty && !job.scopeDate) notes.push('Scope deadline: ' + v); }
-      else if (K === 'access pdf') { if (!empty) job.accessPdf = url(v); }
-      else if (K === 'navigate link' || K === 'navigate ai') {
-        if (!empty) {
-          job.navLink = url(v.split('|')[0].trim());
-          var mc = v.match(/Access code:\s*(\S+)/i); if (mc) job.navCode = mc[1];
-        }
-      }
-      else if (K === 'inspection code') { if (!empty) job.navCode = v.replace(/^Access code:\s*/i, ''); }
-      else if (K === 'lockbox') { if (!empty) job.lockbox = v; else if (rest) notes.push('Lockbox: ' + v); }
-      else if (K === 'igloo code') { if (!empty) job.igloo = v; }
-      else if (K === 'ecd') { dt = date(v); if (dt) job.ecd = dt; if ((!dt || v.length > 10) && !empty) notes.push('ECD: ' + v); }
-      else if (K === 'turn work order') job.turnWo = v;
-      else if (K === 'turn amount') job.amount = v;
-      else if (K === 'scope sheet' || K === 'scope') {
-        if (/https?:/.test(v)) job.scope = url(v);
-        var after = v.split(')').slice(1).join(')');
-        if (/\)\s*\S/.test(v) && after.indexOf('(') >= 0) notes.push('Scope sheet: ' + after.trim());
-      }
-      else if (K === 'flooring') job.flooring = v;
-      else if (K === 'vendor') {
-        var s = /^not assigned/i.test(v) ? null : v.match(/\b(Alyssa|Pablo|Karen)\b/);
-        if (s) job.sub = s[1];
-        if (!s || v !== s[1]) notes.push('Vendor: ' + v);
-      }
-      else if ({ 'other work orders': '', 'work orders': '', 'work order': '' }.hasOwnProperty(K)) other.push(v);
-      else if (K === 'access work order') other.push('Access ' + v);
-      else if (K === 'change order') other.push('Change order ' + v);
-      else if (K === 'new work order') other.push('New work order ' + v);
-      else if (K === 'scoping work order') other.push('Scoping ' + v);
-      else if (K === 'note') notes.push(v);
-      else if (K.indexOf('note ') === 0) notes.push(k.slice(5) + ': ' + v);
-      else if (K === 'turn pdf') { if (!empty) notes.push('Turn PDF: ' + v); }
-      else notes.push(k + ': ' + v);
-    }
-    if (other.length) job.otherWo = other.join('; ');
-    if (notes.length) job.notes = notes.join('\n').replace(/\[Open\]\((https?:\/\/[^)\s]+)\)/g, '$1');
-    return job;
-  }
-
-  function md(d) {
-    var x = new Date(d);
-    return (x.getUTCMonth() + 1 < 10 ? '0' : '') + (x.getUTCMonth() + 1) + '/' + (x.getUTCDate() < 10 ? '0' : '') + x.getUTCDate();
-  }
-  // Reads "Label: MM/DD/YYYY" from the card description.
-  function descDate(desc, label) {
-    var m = (desc || '').replace(/\*\*/g, '').match(new RegExp('^' + label + ':[ \\t]*(\\d{2})\\/(\\d{2})\\/(\\d{4})', 'mi'));
-    return m ? m[3] + '-' + m[1] + '-' + m[2] + 'T12:00:00.000Z' : '';
-  }
-  // A date written to the description since the Job Card was last saved wins over the saved one.
-  function pick(job, seen, desc, key, label) {
-    var d = descDate(desc, label);
-    if (d && (!job[key] || d !== seen[key])) return d;
-    return job[key] || '';
-  }
-
-  TrelloPowerUp.initialize({
-    'card-back-section': function (t) {
-      return {
-        title: 'Job Card',
-        icon: ICON,
-        content: { type: 'iframe', url: t.signUrl('./section2.html'), height: 480 }
-      };
-    },
-    // One date on the front of the card: the scheduled scope in Scoping & Access, the ECD in In progress.
-    'card-badges': function (t) {
-      return Promise.all([t.getAll(), t.card('id', 'name', 'idList', 'desc')]).then(function (r) {
-        var sh = (r[0] && r[0].card && r[0].card.shared) || {}, c = r[1] || {};
-        var job = sh.job || {}, seen = sh.descSeen || {};
-        if (MIGRATE.indexOf(c.id) >= 0 && !sh.migrated && (c.desc || '').trim()) {
-          var from = descToJob(c.name, c.desc), next = {};
-          Object.keys(from).forEach(function (k) { next[k] = from[k]; });
-          // Anything already typed into the Job Card stays as it is.
-          Object.keys(job).forEach(function (k) { next[k] = job[k]; });
-          job = next;
-          t.set('card', 'shared', { job: next, migrated: 1 });
-        }
-        if (c.idList === SCOPING_ACCESS) {
-          var s = pick(job, seen, c.desc, 'scopeDate', 'Scheduled Scope');
-          return [{ text: s ? 'Scope ' + md(s) : 'Scope date needed', color: s ? 'orange' : 'red' }];
-        }
-        if (c.idList === IN_PROGRESS) {
-          var e = pick(job, seen, c.desc, 'ecd', 'ECD');
-          return [{ text: e ? 'ECD ' + md(e) : 'ECD needed', color: e ? 'green' : 'red' }];
-        }
-        return [];
-      });
-    }
-  });
+TrelloPowerUp.initialize({
+'card-back-section': function (t) {
+return Promise.all([t.board('id'), t.card('id')]).then(function (r) {
+var board = r[0].id, card = r[1].id;
+if (SUB_BOARDS[board]) {
+return { title: SUB_BOARDS[board] + '’s Job', icon: ICON, content: { type: 'iframe', url: t.signUrl('./sub.html'), height: 480 } };
+}
+var page = PRACTICE.indexOf(card) >= 0 ? './section3.html' : './section2.html';
+return { title: 'Job Card', icon: ICON, content: { type: 'iframe', url: t.signUrl(page), height: 480 } };
+});
+},
+// One date on the front of the card: the scheduled scope in Scoping & Access, the ECD in In progress.
+'card-badges': function (t) {
+return Promise.all([t.getAll(), t.card('id', 'name', 'idList', 'desc'), t.board('id')]).then(function (r) {
+if (r[2].id !== JOBS_BOARD) return [];
+var sh = (r[0] && r[0].card && r[0].card.shared) || {}, c = r[1] || {};
+var job = sh.job || {}, seen = sh.descSeen || {};
+if (MIGRATE.indexOf(c.id) >= 0 && !sh.migrated && (c.desc || '').trim()) {
+var from = descToJob(c.name, c.desc), next = {};
+Object.keys(from).forEach(function (k) { next[k] = from[k]; });
+// Anything already typed into the Job Card stays as it is.
+Object.keys(job).forEach(function (k) { next[k] = job[k]; });
+job = next;
+t.set('card', 'shared', { job: next, migrated: 1 });
+}
+if (c.idList === SCOPING_ACCESS) {
+var s = pick(job, seen, c.desc, 'scopeDate', 'Scheduled Scope');
+return [{ text: s ? 'Scope ' + md(s) : 'Scope date needed', color: s ? 'orange' : 'red' }];
+}
+if (c.idList === IN_PROGRESS) {
+var e = pick(job, seen, c.desc, 'ecd', 'ECD');
+return [{ text: e ? 'ECD ' + md(e) : 'ECD needed', color: e ? 'green' : 'red' }];
+}
+return [];
+});
+}
+});
 </script>
 </body>
 </html>
