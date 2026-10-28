@@ -1,0 +1,271 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script src="./migrate.js"></script>
+<style>
+:root { --ink:#172b4d; --muted:#5e6c84; --line:#ebecf0; --soft:#f7f8f9; --warm:#fff4e5; --needed:#a14b00; --link:#0c66e4; }
+* { box-sizing: border-box; }
+body { margin:0; font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:transparent; }
+#content { padding:2px 2px 10px; }
+h3 { font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:14px 0 8px; }
+h3:first-child { margin-top:0; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.box { background:#f4f3f1; border-radius:8px; padding:10px 12px; min-width:0; }
+.box.full { grid-column:1 / -1; }
+.box .bl { font-size:13px; color:var(--muted); margin-bottom:3px; }
+.box .bv { font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace; font-size:16px; font-weight:600; overflow-wrap:anywhere; }
+.box .bv .need, .box .bv .empty, .box .bv a { font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+.box .bv .empty { font-weight:400; }
+.cl { margin-bottom:4px; }
+.ci { display:flex; align-items:center; gap:10px; font-size:16px; padding:4px 0; }
+.ci.done { color:var(--muted); text-decoration:line-through; }
+.cb { width:20px; height:20px; border:2px solid #8590a2; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#fff; flex:none; }
+.ci.done .cb { background:#0c66e4; border-color:#0c66e4; }
+.need { color:var(--needed); font-weight:600; }
+.empty { color:var(--muted); }
+a { color:var(--link); font-weight:600; text-decoration:none; }
+.note { background:#fff8e1; border-left:3px solid #f5cd47; padding:8px 10px; font-size:13px; border-radius:4px; margin-top:8px; white-space:pre-wrap; }
+.bar { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+button { font:inherit; font-size:14px; font-weight:600; border:0; border-radius:4px; padding:6px 12px; cursor:pointer; background:#e9ebee; color:var(--ink); }
+button.primary { background:#0c66e4; color:#fff; }
+input, select, textarea { font:inherit; font-size:14px; width:100%; padding:5px 8px; border:1px solid #c1c7d0; border-radius:4px; background:#fff; color:var(--ink); }
+textarea { min-height:60px; resize:vertical; }
+.sec { border-top:1px solid var(--line); margin-top:12px; padding-top:10px; }
+.sh { font-size:13px; font-weight:700; margin-bottom:6px; }
+.row { display:grid; grid-template-columns:150px 1fr; padding:4px 0; font-size:14px; }
+.row .l { color:var(--muted); }
+.row.edit { align-items:center; }
+@media (max-width:420px) { .grid { grid-template-columns:1fr; } .row { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div id="content"></div>
+<script>
+var t = TrelloPowerUp.iframe();
+
+// List ids on the Jobs board.
+var SCOPING = ['6ad41787807d5a5ea54c351f', '6adccd7dd196f31f3fcd9537']; // Scoping & Access, Waiting on Approval
+
+// Every field the Job Card holds. type: text | date | list | notes
+var FIELDS = {
+client: { label: 'Client', type: 'list', options: ['Mynd', 'Ark', 'J&B'] },
+fm: { label: 'Field Manager', type: 'list', options: ['Ashley', 'Tyler'] },
+sub: { label: 'Subcontractor', type: 'list', options: ['Alyssa', 'Pablo', 'Karen'] },
+received: { label: 'Scoping Email Received', type: 'text' },
+scopeDate: { label: 'ECD (scoping)', type: 'date' },
+ecd: { label: 'ECD', type: 'date' },
+turnWo: { label: 'Turn Work Order', type: 'text' },
+amount: { label: 'Approved Scope Amount', type: 'text' },
+otherWo: { label: 'Other Work Orders', type: 'text' },
+scope: { label: 'Scope Sheet', type: 'text' },
+portal: { label: 'Portal Link', type: 'text' },
+paint: { label: 'Paint Label', type: 'text' },
+lockbox: { label: 'Mechanical Lockbox', type: 'text' },
+igloo: { label: 'Igloo Code', type: 'text' },
+accessPdf: { label: 'Access PDF', type: 'text' },
+navLink: { label: 'Navigate Link', type: 'text' },
+navCode: { label: 'Inspection Code', type: 'text' },
+flooring: { label: 'Flooring', type: 'text' },
+notes: { label: 'Notes', type: 'notes' }
+};
+// Edit form order.
+var SECTIONS = [
+{ title: 'Job', keys: ['client', 'fm', 'sub', 'portal', 'paint'] },
+{ title: 'Scoping', keys: ['received', 'scopeDate', 'accessPdf'] },
+{ title: 'Approved turn', keys: ['turnWo', 'amount', 'ecd', 'scope', 'otherWo'] },
+{ title: 'Inspection', keys: ['navLink', 'navCode'] },
+{ title: 'Property entry', keys: ['lockbox', 'igloo'] },
+{ title: 'Flooring', keys: ['flooring'] }
+];
+// View order depends on the card's stage. scopeDue is worked out from the scheduled scope date.
+var VIEW_SCOPING = [
+{ title: 'Job', keys: ['client', 'fm', 'received', 'scopeDate', 'scopeDue', 'accessPdf', 'portal', 'paint'] },
+{ title: 'Inspection', keys: ['navLink', 'navCode'] },
+{ title: 'Property entry', keys: ['lockbox', 'igloo'] }
+];
+var VIEW_TURN = [
+{ title: 'Job', keys: ['client', 'fm', 'sub', 'ecd', 'portal', 'paint'] },
+{ title: 'Approved turn', keys: ['turnWo', 'amount', 'scope', 'otherWo', 'flooring'] },
+{ title: 'Property entry', keys: ['lockbox', 'igloo'] },
+{ title: 'Inspection and proof of service', keys: ['navLink', 'navCode'] }
+];
+var FULL = { accessPdf: 1, scope: 1, otherWo: 1, flooring: 1, navLink: 1, navCode: 1, portal: 1 };
+// Turn fields with nothing in them are left off the view so the card stays short.
+var OPTIONAL = { otherWo: 1, flooring: 1 };
+
+var job = {}, card = {}, editing = false;
+
+function esc(s) {
+return String(s).replace(/[&<>"']/g, function (c) {
+return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+});
+}
+function md(d) { var x = new Date(d); return isNaN(x) ? '' : ('0' + (x.getUTCMonth() + 1)).slice(-2) + '/' + ('0' + x.getUTCDate()).slice(-2) + '/' + x.getUTCFullYear(); }
+function iso(d) { return new Date(d).toISOString().slice(0, 10); }
+function scoping() { return SCOPING.indexOf(card.idList) >= 0; }
+
+function shown(key) {
+var f = FIELDS[key], v = job[key];
+if (v === undefined || v === null || v === '') return '<span class="empty">Not provided</span>';
+if (/^needed$/i.test(String(v))) return '<span class="need">Needed</span>';
+if (f.type === 'date') return md(v);
+if (/^https?:\/\//i.test(String(v))) {
+var name = { navLink: 'Open Navigate', scope: 'Open scope sheet', portal: 'Open portal' }[key] || 'Open';
+return '<a href="' + esc(v) + '" target="_blank" rel="noopener">' + name + ' ↗</a>';
+}
+return esc(v);
+}
+
+function checklistHtml() {
+var cl = (card.checklists || []).filter(function (c) { return /scoping\s*&\s*access/i.test(c.name); })[0];
+if (!scoping() || !cl || !(cl.checkItems || []).length) return '';
+var html = '<h3>Checklist: Scoping &amp; Access</h3><div class="cl">';
+cl.checkItems.forEach(function (it) {
+var done = it.state === 'complete';
+html += '<div class="ci' + (done ? ' done' : '') + '"><span class="cb">' + (done ? '✓' : '') + '</span>' + esc(it.name) + '</div>';
+});
+return html + '</div>';
+}
+
+function viewHtml() {
+var html = '<div class="bar" style="margin-top:0;margin-bottom:8px"><button class="primary" id="edit">Edit job card</button></div>';
+html += checklistHtml();
+(scoping() ? VIEW_SCOPING : VIEW_TURN).forEach(function (s) {
+var boxes = '';
+s.keys.forEach(function (k) {
+var label, val;
+if (OPTIONAL[k] && !job[k]) return;
+if (k === 'scopeDue') {
+label = 'Scope Inspection';
+val = job.scopeDate ? md(new Date(job.scopeDate).getTime() + 48 * 3600 * 1000) : '<span class="need">Needed</span>';
+} else {
+label = k === 'scopeDate' ? 'ECD' : FIELDS[k].label;
+val = ((k === 'scopeDate' || k === 'ecd') && !job[k]) ? '<span class="need">Needed</span>' : shown(k);
+}
+boxes += '<div class="box' + (FULL[k] ? ' full' : '') + '"><div class="bl">' + label + '</div><div class="bv">' + val + '</div></div>';
+});
+if (boxes) html += '<h3>' + s.title + '</h3><div class="grid">' + boxes + '</div>';
+});
+if (job.notes) html += '<h3>Notes</h3><div class="note">' + esc(job.notes) + '</div>';
+return html;
+}
+
+function input(key) {
+var f = FIELDS[key], v = job[key] || '';
+if (f.type === 'list') {
+return '<select data-k="' + key + '"><option value=""></option>' + f.options.map(function (o) {
+return '<option' + (o === v ? ' selected' : '') + '>' + o + '</option>';
+}).join('') + '</select>';
+}
+if (f.type === 'date') return '<input type="date" data-k="' + key + '" value="' + (v ? iso(v) : '') + '">';
+if (f.type === 'notes') return '<textarea data-k="' + key + '">' + esc(v) + '</textarea>';
+return '<input type="text" data-k="' + key + '" value="' + esc(v) + '">';
+}
+
+function editHtml() {
+var html = '';
+SECTIONS.forEach(function (s) {
+html += '<div class="sec"><div class="sh">' + s.title + '</div>';
+s.keys.forEach(function (k) {
+html += '<div class="row edit"><span class="l">' + FIELDS[k].label + '</span>' + input(k) + '</div>';
+});
+html += '</div>';
+});
+html += '<div class="sec"><div class="row edit"><span class="l">Notes</span>' + input('notes') + '</div></div>';
+html += '<div class="bar"><button id="cancel">Cancel</button><button class="primary" id="save">Save</button></div>';
+return html;
+}
+
+function draw() {
+var el = document.getElementById('content');
+el.innerHTML = editing ? editHtml() : viewHtml();
+if (editing) {
+document.getElementById('cancel').onclick = function () { editing = false; draw(); };
+document.getElementById('save').onclick = save;
+} else {
+document.getElementById('edit').onclick = function () { editing = true; draw(); };
+}
+return t.sizeTo('#content');
+}
+
+function save() {
+var next = {};
+Array.prototype.forEach.call(document.querySelectorAll('[data-k]'), function (el) {
+var k = el.getAttribute('data-k'), v = el.value.trim();
+if (!v) return;
+// Dates are kept as noon UTC so they never shift a day in any time zone.
+next[k] = FIELDS[k].type === 'date' ? v + 'T12:00:00.000Z' : v;
+});
+// Remember what the description said at save time, so only later description changes win over these values.
+return fromDescription().then(function (seen) {
+return t.set('card', 'shared', { job: next, descSeen: seen });
+}).then(function () { job = next; editing = false; return draw(); });
+}
+
+// Cards that have never been edited get their values from the card name and description.
+function fromDescription() {
+return t.card('name', 'desc').then(function (c) {
+var d = (c.desc || '').replace(/\*\*/g, ''), out = {};
+function line(label) {
+var m = d.match(new RegExp('^' + label + ':[ \\t]*(.+)$', 'mi'));
+return m ? m[1].trim() : '';
+}
+function clean(v) { return /^not provided/i.test(v) ? '' : v; }
+function url(v) { var m = v.match(/\((https?:\/\/[^\s)"]+)/) || v.match(/(https?:\/\/[^\s|)"]+)/); return m ? m[1] : v; }
+function date(v) { var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[1] + '-' + m[2] + 'T12:00:00.000Z' : ''; }
+var fm = (c.name || '').split('|')[0].trim();
+if (fm === 'Ashley' || fm === 'Tyler') out.fm = fm;
+var client = line('Client'); if (client === 'Mynd' || client === 'Ark' || client === 'J&B') out.client = client;
+var rec = clean(line('Scoping Received')); if (rec) out.received = rec;
+var sched = date(line('Scheduled Scope')); if (sched) out.scopeDate = sched;
+var pdf = clean(line('Access PDF')); if (pdf) out.accessPdf = url(pdf);
+var nav = clean(line('Navigate Link') || line('Navigate AI')); if (nav) out.navLink = url(nav);
+var code = clean(line('Inspection Code')) || ((line('Navigate AI').match(/Access code:\s*(\S+)/i) || [])[1] || '');
+if (code) out.navCode = code.replace(/^Access code:\s*/i, '');
+var lb = clean(line('Lockbox')); if (lb) out.lockbox = lb;
+var ig = clean(line('Igloo Code')); if (ig) out.igloo = ig;
+var fl = line('FLOORING'); if (fl) out.flooring = fl;
+var ecd = date(line('ECD')); if (ecd) out.ecd = ecd;
+var sheet = line('Scope Sheet') || line('Scope'); if (/https?:/.test(sheet)) out.scope = url(sheet);
+var portal = clean(line('Portal Link')); if (/https?:/.test(portal)) out.portal = url(portal);
+var paint = clean(line('Paint Label')); if (paint) out.paint = paint;
+var two = line('Turn Work Order'); if (two) out.turnWo = two;
+var amt = line('Turn Amount'); if (amt) out.amount = amt;
+var v = line('Vendor').match(/\b(Alyssa|Pablo|Karen)\b/); if (v) out.sub = v[1];
+return out;
+}).catch(function () { return {}; });
+}
+
+// Cards from before the rollout move their old description into the Job Card the first time they are opened.
+function migrateOnce() {
+return Promise.all([t.getAll(), t.card('id', 'name', 'desc')]).then(function (r) {
+var sh = (r[0] && r[0].card && r[0].card.shared) || {}, c = r[1] || {};
+if (MIGRATE.indexOf(c.id) < 0 || sh.migrated || !(c.desc || '').trim()) return;
+var next = descToJob(c.name, c.desc), job = sh.job || {};
+Object.keys(job).forEach(function (k) { next[k] = job[k]; });
+return t.set('card', 'shared', { job: next, migrated: 1 });
+});
+}
+
+function load() {
+if (editing) return t.sizeTo('#content');
+return migrateOnce().then(function () { return t.getAll(); }).then(function (all) {
+var sh = (all && all.card && all.card.shared) || {}, stored = sh.job || {}, seen = sh.descSeen || {};
+return Promise.all([fromDescription(), t.card('idList', 'checklists')]).then(function (r) {
+// Saved values win, except where n8n or the email check wrote something new to the description since the last save.
+job = {};
+Object.keys(stored).forEach(function (k) { job[k] = stored[k]; });
+Object.keys(r[0]).forEach(function (k) { if (!(k in stored) || r[0][k] !== seen[k]) job[k] = r[0][k]; });
+card = r[1] || {};
+return draw();
+});
+});
+}
+
+t.render(load);
+</script>
+</body>
+</html>
