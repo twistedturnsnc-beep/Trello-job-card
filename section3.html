@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <script src="./migrate.js"></script>
-<script src="./colors.js?v=2"></script>
 <style>
 :root { --ink:#172b4d; --muted:#5e6c84; --line:#ebecf0; --soft:#f7f8f9; --warm:#fff4e5; --needed:#a14b00; --link:#0c66e4; }
 * { box-sizing: border-box; }
@@ -20,8 +19,6 @@ h3:first-child { margin-top:0; }
 .box .bv { font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace; font-size:16px; font-weight:600; overflow-wrap:anywhere; }
 .box .bv .need, .box .bv .empty, .box .bv a { font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
 .box .bv .empty { font-weight:400; }
-.banner { display:flex; align-items:center; justify-content:space-between; gap:8px; border-radius:8px; padding:10px 14px; margin-bottom:10px; color:#fff; font-weight:800; font-size:16px; letter-spacing:.06em; text-transform:uppercase; }
-.banner .sub { font-size:12px; font-weight:600; letter-spacing:.04em; opacity:.9; }
 .cl { margin-bottom:4px; }
 .ci { display:flex; align-items:center; gap:10px; font-size:16px; padding:4px 0; }
 .ci.done { color:var(--muted); text-decoration:line-through; }
@@ -122,14 +119,6 @@ return '<a href="' + esc(v) + '" target="_blank" rel="noopener">' + name + ' ↗
 return esc(v);
 }
 
-// Colored strip with the field manager's name, so it's clear at a glance whose job it is.
-function bannerHtml() {
-var who = job.fm, c = who && BANNER[who];
-if (!c) return '';
-return '<div class="banner" style="background:' + c.bg + ';color:' + c.fg + '"><span>' + esc(who) + '’s job</span>' +
-(job.sub ? '<span class="sub">Sub: ' + esc(job.sub) + '</span>' : '') + '</div>';
-}
-
 function checklistHtml() {
 var cl = (card.checklists || []).filter(function (c) { return /scoping\s*&\s*access/i.test(c.name); })[0];
 if (!scoping() || !cl || !(cl.checkItems || []).length) return '';
@@ -142,7 +131,7 @@ return html + '</div>';
 }
 
 function viewHtml() {
-var html = bannerHtml() + '<div class="bar" style="margin-top:0;margin-bottom:8px"><button class="primary" id="edit">Edit job card</button></div>';
+var html = '<div class="bar" style="margin-top:0;margin-bottom:8px"><button class="primary" id="edit">Edit job card</button></div>';
 html += checklistHtml();
 (scoping() ? VIEW_SCOPING : VIEW_TURN).forEach(function (s) {
 var boxes = '';
