@@ -39,7 +39,7 @@ var board = r[0].id, card = r[1].id;
 if (SUB_BOARDS[board]) {
 return { title: SUB_BOARDS[board] + '’s Job', icon: ICON, content: { type: 'iframe', url: t.signUrl('./sub2.html'), height: 480 } };
 }
-var page = PRACTICE.indexOf(card) >= 0 ? './section5.html' : './section2.html';
+var page = PRACTICE.indexOf(card) >= 0 ? './section6.html' : './section2.html';
 return { title: 'Job Card', icon: ICON, content: { type: 'iframe', url: t.signUrl(page), height: 480 } };
 });
 },
