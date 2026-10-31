@@ -63,6 +63,8 @@ var portal = link(line('Portal Link') || line('Portal')); if (portal) from.porta
 var paint = line('Paint Label'); if (paint && !/^(not provided|needed)/i.test(paint)) from.paint = paint;
 var insp = descDate(desc, 'Scope Inspection'), iso = line('Navigate AI Inspection').match(/^(\d{4}-\d{2}-\d{2})/);
 if (insp) from.inspection = insp; else if (iso) from.inspection = iso[1] + 'T12:00:00.000Z';
+// The Navigate inspection link n8n writes after a scope is scheduled, with its access code.
+var nav = link(line('Navigate AI Inspection')); if (nav) { from.navLink = nav; var code = nav.match(/[?&]code=([A-Za-z0-9]+)/); if (code) from.navCode = code[1]; }
 if (from.notes) from.notes = from.notes.split('\n').filter(function (l) { return !/^(Portal Link|Portal|Paint Label|Navigate AI Inspection|Scope Inspection):/i.test(l); }).join('\n');
 var next = {}, nextSeen = {};
 Object.keys(job).forEach(function (k) { next[k] = job[k]; });
