@@ -111,6 +111,8 @@ job = a.job; seen = a.seen;
 var hash = descHash(c.desc);
 t.set('card', 'shared', { job: job, descSeen: seen, descHash: hash }).then(function () { return clearDesc(t, c.id, hash); }).catch(function () {});
 }
+// Already saved earlier (for example before the Allow click): just empty it.
+else if ((c.desc || '').trim() && sh.descHash === descHash(c.desc)) clearDesc(t, c.id, sh.descHash).catch(function () {});
 if (c.idList === IN_PROGRESS) {
 var e = pick(job, seen, c.desc, 'ecd', 'ECD');
 return [{ text: e ? 'ECD ' + md(e) : 'ECD needed', color: e ? 'green' : 'red' }];
