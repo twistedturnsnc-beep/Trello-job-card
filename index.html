@@ -12,6 +12,8 @@ var ICON = 'https://cdn.jsdelivr.net/npm/@tabler/icons@2.47.0/icons/clipboard-li
 var JOBS_BOARD = '6ad4177cbae2e4f1006a4efc';
 var SUB_BOARDS = { '6ad83ff1e54e7e573993c604': 'Karen', '6ade9cecb1c486ba4e6e84cb': 'Alyssa' };
 var IN_PROGRESS = '6ad4178d04d73fb79ebe8a2c';
+// The Job Card's own Trello key. Candice clicks Allow once on a Job Card so it can empty descriptions (Candice, 10/31).
+var APP_KEY = 'ad3efcf32217b49cb05c06e7399eb447';
 
 function md(d) {
 var x = new Date(d);
@@ -35,6 +37,21 @@ s = String(s || '');
 var h = 5381;
 for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
 return h.toString(16);
+}
+// Empties the description once its text is saved in the Job Card. Skipped if the description changed in the meantime.
+// Without the one-time Allow, nothing happens here and n8n's cleanup empties it instead.
+function clearDesc(t, id, hash) {
+var api = t.getRestApi();
+return api.isAuthorized().then(function (ok) {
+if (!ok) return;
+return api.getToken().then(function (token) {
+var url = 'https://api.trello.com/1/cards/' + id + '?key=' + APP_KEY + '&token=' + token;
+return fetch(url + '&fields=desc').then(function (r) { return r.json(); }).then(function (cur) {
+if (!(cur.desc || '').trim() || descHash(cur.desc) !== hash) return;
+return fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ desc: '' }) });
+});
+});
+});
 }
 // Copies what n8n or a person wrote in the description into the Job Card, so the description can be emptied (Candice, 10/30).
 // Values typed into the Job Card are kept unless the description has a newer value; notes are added, never replaced.
@@ -91,7 +108,8 @@ t.set('card', 'shared', { job: next, migrated: 1 });
 if ((c.desc || '').trim() && sh.descHash !== descHash(c.desc)) {
 var a = absorb(job, seen, c.name, c.desc);
 job = a.job; seen = a.seen;
-t.set('card', 'shared', { job: job, descSeen: seen, descHash: descHash(c.desc) }).catch(function () {});
+var hash = descHash(c.desc);
+t.set('card', 'shared', { job: job, descSeen: seen, descHash: hash }).then(function () { return clearDesc(t, c.id, hash); }).catch(function () {});
 }
 if (c.idList === IN_PROGRESS) {
 var e = pick(job, seen, c.desc, 'ecd', 'ECD');
@@ -100,7 +118,7 @@ return [{ text: e ? 'ECD ' + md(e) : 'ECD needed', color: e ? 'green' : 'red' }]
 return [];
 });
 }
-});
+}, { appKey: APP_KEY, appName: 'Twisted Turns Job Card' });
 </script>
 </body>
 </html>

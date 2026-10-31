@@ -44,7 +44,8 @@ textarea { min-height:60px; resize:vertical; }
 <body>
 <div id="content"></div>
 <script>
-var t = TrelloPowerUp.iframe();
+var t = TrelloPowerUp.iframe({ appKey: 'ad3efcf32217b49cb05c06e7399eb447', appName: 'Twisted Turns Job Card' });
+var authed = true;
 
 // List ids on the Jobs board.
 var SCOPING = ['6ad41787807d5a5ea54c351f', '6adccd7dd196f31f3fcd9537']; // Scoping & Access, Waiting on Approval
@@ -131,6 +132,8 @@ return html + '</div>';
 
 function viewHtml() {
 var html = '<div class="bar" style="margin-top:0;margin-bottom:8px"><button class="primary" id="edit">Edit job card</button></div>';
+// One-time Allow so the Job Card can empty descriptions after saving them.
+if (!authed) html += '<div class="bar" style="margin-top:0;margin-bottom:8px"><button id="allow">Allow Job Card to clear descriptions</button></div>';
 html += checklistHtml();
 (scoping() ? VIEW_SCOPING : VIEW_TURN).forEach(function (s) {
 var boxes = '';
@@ -181,6 +184,9 @@ document.getElementById('cancel').onclick = function () { editing = false; draw(
 document.getElementById('save').onclick = save;
 } else {
 document.getElementById('edit').onclick = function () { editing = true; draw(); };
+if (!authed) document.getElementById('allow').onclick = function () {
+t.getRestApi().authorize({ scope: 'read,write', expiration: 'never' }).then(function () { authed = true; draw(); }).catch(function () {});
+};
 }
 return t.sizeTo('#content');
 }
@@ -245,7 +251,7 @@ return t.set('card', 'shared', { job: next, migrated: 1 });
 
 function load() {
 if (editing) return t.sizeTo('#content');
-return migrateOnce().then(function () { return t.getAll(); }).then(function (all) {
+return migrateOnce().then(function () { return t.getRestApi().isAuthorized().then(function (ok) { authed = ok; }, function () {}); }).then(function () { return t.getAll(); }).then(function (all) {
 var sh = (all && all.card && all.card.shared) || {}, stored = sh.job || {}, seen = sh.descSeen || {};
 return Promise.all([fromDescription(), t.card('idList', 'checklists')]).then(function (r) {
 // Saved values win, except where n8n or the email check wrote something new to the description since the last save.
