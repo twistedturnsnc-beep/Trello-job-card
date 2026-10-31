@@ -38,17 +38,27 @@ var h = 5381;
 for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
 return h.toString(16);
 }
-// Empties the description once its text is saved in the Job Card. Skipped if the description changed in the meantime.
+// Empties the description once its text is saved in the Job Card. Reads the description fresh from Trello first,
+// because the board can show an older copy; newer text is saved into the Job Card before it is emptied.
 // Without the one-time Allow, nothing happens here and n8n's cleanup empties it instead.
-function clearDesc(t, id, hash) {
+function clearDesc(t, c, job, seen, hash) {
 var api = t.getRestApi();
 return api.isAuthorized().then(function (ok) {
 if (!ok) return;
 return api.getToken().then(function (token) {
-var url = 'https://api.trello.com/1/cards/' + id + '?key=' + APP_KEY + '&token=' + token;
-return fetch(url + '&fields=desc').then(function (r) { return r.json(); }).then(function (cur) {
-if (!(cur.desc || '').trim() || descHash(cur.desc) !== hash) return;
+var url = 'https://api.trello.com/1/cards/' + c.id + '?key=' + APP_KEY + '&token=' + token;
+function fresh() { return fetch(url + '&fields=desc').then(function (r) { return r.json(); }).then(function (x) { return x.desc || ''; }); }
+return fresh().then(function (desc) {
+if (!desc.trim()) return;
+var h = descHash(desc), saved = Promise.resolve();
+if (h !== hash) {
+var a = absorb(job, seen, c.name, desc);
+saved = t.set('card', 'shared', { job: a.job, descSeen: a.seen, descHash: h });
+}
+return saved.then(fresh).then(function (now) {
+if (descHash(now) !== h) return;
 return fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ desc: '' }) });
+});
 });
 });
 });
@@ -111,10 +121,10 @@ if ((c.desc || '').trim() && sh.descHash !== descHash(c.desc)) {
 var a = absorb(job, seen, c.name, c.desc);
 job = a.job; seen = a.seen;
 var hash = descHash(c.desc);
-t.set('card', 'shared', { job: job, descSeen: seen, descHash: hash }).then(function () { return clearDesc(t, c.id, hash); }).catch(function () {});
+t.set('card', 'shared', { job: job, descSeen: seen, descHash: hash }).then(function () { return clearDesc(t, c, a.job, a.seen, hash); }).catch(function () {});
 }
 // Already saved earlier (for example before the Allow click): just empty it.
-else if ((c.desc || '').trim() && sh.descHash === descHash(c.desc)) clearDesc(t, c.id, sh.descHash).catch(function () {});
+else if ((c.desc || '').trim()) clearDesc(t, c, job, seen, sh.descHash).catch(function () {});
 if (c.idList === IN_PROGRESS) {
 var e = pick(job, seen, c.desc, 'ecd', 'ECD');
 return [{ text: e ? 'ECD ' + md(e) : 'ECD needed', color: e ? 'green' : 'red' }];
