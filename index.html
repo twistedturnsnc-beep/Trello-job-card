@@ -63,6 +63,19 @@ return fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json'
 });
 });
 }
+// Copies the ECD into Trello's own due date, so it shows on the front of the card in the phone app too (Candice, 10/31).
+// Uses the same one-time Allow as clearDesc; without it, n8n still sets the due date when the form gives an ECD.
+function syncDue(t, c, e) {
+var day = new Date(e).toISOString().slice(0, 10);
+if (c.due && String(c.due).slice(0, 10) === day) return Promise.resolve();
+var api = t.getRestApi();
+return api.isAuthorized().then(function (ok) {
+if (!ok) return;
+return api.getToken().then(function (token) {
+return fetch('https://api.trello.com/1/cards/' + c.id + '?key=' + APP_KEY + '&token=' + token, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ due: day + 'T17:00:00.000Z' }) });
+});
+});
+}
 // Copies what n8n or a person wrote in the description into the Job Card, so the description can be emptied (Candice, 10/30).
 // Values typed into the Job Card are kept unless the description has a newer value; notes are added, never replaced.
 function absorb(job, seen, name, desc) {
@@ -104,7 +117,7 @@ return { title: 'Job Card', icon: ICON, content: { type: 'iframe', url: t.signUr
 },
 // The ECD on the front of In progress cards. Scoping cards show Trello's own due date instead.
 'card-badges': function (t) {
-return Promise.all([t.getAll(), t.card('id', 'name', 'idList', 'desc'), t.board('id')]).then(function (r) {
+return Promise.all([t.getAll(), t.card('id', 'name', 'idList', 'desc', 'due'), t.board('id')]).then(function (r) {
 if (r[2].id !== JOBS_BOARD) return [];
 var sh = (r[0] && r[0].card && r[0].card.shared) || {}, c = r[1] || {};
 var job = sh.job || {}, seen = sh.descSeen || {};
@@ -127,6 +140,7 @@ t.set('card', 'shared', { job: job, descSeen: seen, descHash: hash }).then(funct
 else if ((c.desc || '').trim()) clearDesc(t, c, job, seen, sh.descHash).catch(function () {});
 if (c.idList === IN_PROGRESS) {
 var e = pick(job, seen, c.desc, 'ecd', 'ECD');
+if (e) syncDue(t, c, e).catch(function () {});
 return [{ text: e ? 'ECD ' + md(e) : 'ECD needed', color: e ? 'green' : 'red' }];
 }
 return [];
