@@ -29,6 +29,40 @@ if (d && (!job[key] || d !== seen[key])) return d;
 return job[key] || '';
 }
 
+// A short fingerprint of a description. n8n computes the same one to know the description is saved in the Job Card and can be cleared.
+function descHash(s) {
+s = String(s || '');
+var h = 5381;
+for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+return h.toString(16);
+}
+// Copies what n8n or a person wrote in the description into the Job Card, so the description can be emptied (Candice, 10/30).
+// Values typed into the Job Card are kept unless the description has a newer value; notes are added, never replaced.
+function absorb(job, seen, name, desc) {
+var from = descToJob(name, desc), d = (desc || '').replace(/\*\*/g, '');
+function line(label) { var m = d.match(new RegExp('^' + label + ':[ \\t]*(.+)$', 'mi')); return m ? m[1].trim() : ''; }
+function link(v) { var m = v.match(/(https?:\/\/[^\s|)"\]]+)/); return m ? m[1] : ''; }
+var portal = link(line('Portal Link') || line('Portal')); if (portal) from.portal = portal;
+var paint = line('Paint Label'); if (paint && !/^(not provided|needed)/i.test(paint)) from.paint = paint;
+var insp = descDate(desc, 'Scope Inspection'), iso = line('Navigate AI Inspection').match(/^(\d{4}-\d{2}-\d{2})/);
+if (insp) from.inspection = insp; else if (iso) from.inspection = iso[1] + 'T12:00:00.000Z';
+if (from.notes) from.notes = from.notes.split('\n').filter(function (l) { return !/^(Portal Link|Portal|Paint Label|Navigate AI Inspection|Scope Inspection):/i.test(l); }).join('\n');
+var next = {}, nextSeen = {};
+Object.keys(job).forEach(function (k) { next[k] = job[k]; });
+Object.keys(seen).forEach(function (k) { nextSeen[k] = seen[k]; });
+Object.keys(from).forEach(function (k) {
+var v = from[k];
+if (!v) return;
+if (k === 'notes' || k === 'otherWo') {
+var sep = k === 'notes' ? '\n' : '; ', have = next[k] ? String(next[k]).split(sep) : [];
+String(v).split(sep).forEach(function (x) { if (x && have.indexOf(x) < 0) have.push(x); });
+next[k] = have.join(sep);
+} else if (!(k in next) || v !== seen[k]) next[k] = v;
+nextSeen[k] = v;
+});
+return { job: next, seen: nextSeen };
+}
+
 TrelloPowerUp.initialize({
 'card-back-section': function (t) {
 return t.board('id').then(function (b) {
@@ -52,6 +86,12 @@ Object.keys(from).forEach(function (k) { next[k] = from[k]; });
 Object.keys(job).forEach(function (k) { next[k] = job[k]; });
 job = next;
 t.set('card', 'shared', { job: next, migrated: 1 });
+}
+// Save any description text into the Job Card the first time the board shows it; n8n then empties the description.
+if ((c.desc || '').trim() && sh.descHash !== descHash(c.desc)) {
+var a = absorb(job, seen, c.name, c.desc);
+job = a.job; seen = a.seen;
+t.set('card', 'shared', { job: job, descSeen: seen, descHash: descHash(c.desc) }).catch(function () {});
 }
 if (c.idList === IN_PROGRESS) {
 var e = pick(job, seen, c.desc, 'ecd', 'ECD');
