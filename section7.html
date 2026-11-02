@@ -202,7 +202,48 @@ next[k] = FIELDS[k].type === 'date' ? v + 'T12:00:00.000Z' : v;
 // Remember what the description said at save time, so only later description changes win over these values.
 return fromDescription().then(function (seen) {
 return t.set('card', 'shared', { job: next, descSeen: seen });
-}).then(function () { job = next; editing = false; return draw(); });
+}).then(function () { job = next; editing = false; return Promise.all([draw(), applyManager(next.fm)]); });
+}
+
+// Picking Ashley or Tyler here does what the upload form does: the manager goes first in the card title
+// and the card gets that manager's colored banner (Candice, 11/2). Needs the one-time Allow.
+var APP_KEY = 'ad3efcf32217b49cb05c06e7399eb447';
+var BAND = { Ashley: '#2e6b30', Tyler: '#0077be' };
+function bandPng(fm) {
+var c = document.createElement('canvas'); c.width = 1200; c.height = 150;
+var x = c.getContext('2d'); x.fillStyle = BAND[fm]; x.fillRect(0, 0, 1200, 150);
+return new Promise(function (res) { c.toBlob(res, 'image/png'); });
+}
+function applyManager(fm) {
+if (!BAND[fm]) return Promise.resolve();
+var api = t.getRestApi();
+return api.isAuthorized().then(function (ok) {
+if (!ok) return;
+return Promise.all([api.getToken(), t.card('id', 'name')]).then(function (r) {
+var c = r[1], base = 'https://api.trello.com/1/cards/' + c.id, auth = 'key=' + APP_KEY + '&token=' + r[0];
+var parts = (c.name || '').split(' | ');
+var renamed = parts.length > 1 && parts[0].trim() !== fm
+? fetch(base + '?' + auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: [fm].concat(parts.slice(1)).join(' | ') }) })
+: Promise.resolve();
+return renamed.then(function () {
+return fetch(base + '/attachments?fields=name&' + auth).then(function (x) { return x.json(); });
+}).then(function (atts) {
+var mine = atts.filter(function (a) { return a.name === fm + ' cover.png'; });
+var old = atts.filter(function (a) { return /^(Ashley|Tyler) cover\.png$/.test(a.name) && a.name !== fm + ' cover.png'; });
+var cover = mine.length
+? fetch(base + '?' + auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idAttachmentCover: mine[0].id }) })
+: bandPng(fm).then(function (png) {
+var fd = new FormData();
+fd.append('file', png, fm + ' cover.png'); fd.append('name', fm + ' cover.png'); fd.append('setCover', 'true');
+return fetch(base + '/attachments?' + auth, { method: 'POST', body: fd });
+});
+// The other manager's banner is removed so only one band stays on the card.
+return cover.then(function () {
+return Promise.all(old.map(function (a) { return fetch(base + '/attachments/' + a.id + '?' + auth, { method: 'DELETE' }); }));
+});
+});
+});
+}).catch(function () {});
 }
 
 // Cards that have never been edited get their values from the card name and description.
