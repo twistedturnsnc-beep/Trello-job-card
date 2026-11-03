@@ -140,7 +140,18 @@ t.set('card', 'shared', { job: job, descSeen: seen, descHash: hash }).then(funct
 else if ((c.desc || '').trim()) clearDesc(t, c, job, seen, sh.descHash).catch(function () {});
 if (c.idList === IN_PROGRESS) {
 var e = pick(job, seen, c.desc, 'ecd', 'ECD');
-if (e) syncDue(t, c, e).catch(function () {});
+// Two-way (Candice, 11/03): a due date changed by hand in Trello becomes the ECD, and an ECD changed in the Job Card becomes the due date.
+// dueSynced is the day the two last agreed, so the side that moved away from it is the newer edit and wins.
+function etDay(d) { return new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); } // YYYY-MM-DD in Eastern time
+var dueDay = c.due ? etDay(c.due) : '', ecdDay = e ? etDay(e) : '';
+if (dueDay && dueDay !== ecdDay && (sh.dueSynced ? dueDay !== sh.dueSynced : !ecdDay)) {
+job.ecd = e = dueDay + 'T12:00:00.000Z';
+t.set('card', 'shared', { job: job, descSeen: seen, dueSynced: dueDay }).catch(function () {});
+} else if (e && dueDay === ecdDay) {
+if (sh.dueSynced !== dueDay) t.set('card', 'shared', 'dueSynced', dueDay).catch(function () {});
+} else if (e) {
+syncDue(t, c, e).then(function (r) { if (r && r.ok) return t.set('card', 'shared', 'dueSynced', ecdDay); }).catch(function () {});
+}
 return [{ text: e ? 'ECD ' + md(e) : 'ECD needed', color: e ? 'green' : 'red' }];
 }
 return [];
