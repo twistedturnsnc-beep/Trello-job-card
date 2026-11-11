@@ -28,6 +28,9 @@ h3:first-child { margin-top:0; }
 .empty { color:var(--muted); }
 a { color:var(--link); font-weight:600; text-decoration:none; }
 .note { background:#fff8e1; border-left:3px solid #f5cd47; padding:8px 10px; font-size:13px; border-radius:4px; margin-top:8px; white-space:pre-wrap; }
+.cos { display:grid; gap:6px; }
+.co { display:flex; justify-content:space-between; gap:12px; align-items:baseline; flex-wrap:wrap; }
+.corow { display:grid; grid-template-columns:120px 1fr auto; gap:6px; align-items:center; margin-bottom:6px; }
 .bar { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
 button { font:inherit; font-size:14px; font-weight:600; border:0; border-radius:4px; padding:6px 12px; cursor:pointer; background:#e9ebee; color:var(--ink); }
 button.primary { background:#0c66e4; color:#fff; }
@@ -98,6 +101,37 @@ var OPTIONAL = { otherWo: 1, flooring: 1 };
 
 var job = {}, card = {}, editing = false;
 
+// Change order sheets (Candice, 11/11). The form attaches each one to the card as
+// "<Manager> Change Order - <address> - WO <number>"; those show here on their own.
+// Sheets typed in under Edit are kept in job.coSheets, and ones removed there in job.coRemoved.
+function coFromAttachments() {
+var out = [];
+(card.attachments || []).forEach(function (a) {
+var m = (a.name || '').match(/Change Order\b.*\bWO\s*([0-9]+-[0-9]+)/i);
+if (m && /^https:\/\/docs\.google\.com\//.test(a.url || '')) out.push({ wo: m[1], url: a.url });
+});
+return out;
+}
+function coSheets() {
+var byWo = {}, removed = job.coRemoved || [];
+// Newest attachment wins for the same work order; a sheet typed in under Edit wins over both.
+coFromAttachments().forEach(function (c) { if (removed.indexOf(c.wo) < 0) byWo[c.wo] = c; });
+(job.coSheets || []).forEach(function (c) { if (c && c.wo && c.url) byWo[c.wo] = c; });
+return Object.keys(byWo).sort().map(function (k) { return byWo[k]; });
+}
+function coBox() {
+var list = coSheets();
+if (!list.length) return '';
+return '<div class="box full"><div class="bl">Change Order Sheets</div><div class="cos">' + list.map(function (c) {
+return '<div class="co"><span class="bv">CO ' + esc(c.wo) + '</span><a href="' + esc(c.url) + '" target="_blank" rel="noopener">Open change order sheet ↗</a></div>';
+}).join('') + '</div></div>';
+}
+function coRow(c) {
+return '<div class="corow"><input type="text" class="co-wo" placeholder="Work order" aria-label="Work order" value="' + esc(c.wo || '') + '">' +
+'<input type="text" class="co-url" placeholder="Sheet link" aria-label="Sheet link" value="' + esc(c.url || '') + '">' +
+'<button type="button" class="co-x" aria-label="Remove">✕</button></div>';
+}
+
 function esc(s) {
 return String(s).replace(/[&<>"']/g, function (c) {
 return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -143,6 +177,7 @@ if (OPTIONAL[k] && !job[k]) return;
 label = FIELDS[k].label;
 val = (k === 'ecd' && !job[k]) ? '<span class="need">Needed</span>' : shown(k);
 boxes += '<div class="box' + (FULL[k] ? ' full' : '') + '"><div class="bl">' + label + '</div><div class="bv">' + val + '</div></div>';
+if (k === 'scope') boxes += coBox();
 });
 if (boxes) html += '<h3>' + s.title + '</h3><div class="grid">' + boxes + '</div>';
 });
@@ -171,6 +206,8 @@ html += '<div class="row edit"><span class="l">' + FIELDS[k].label + '</span>' +
 });
 html += '</div>';
 });
+html += '<div class="sec"><div class="sh">Change Order Sheets</div><div id="corows">' + coSheets().map(coRow).join('') + '</div>' +
+'<button type="button" id="co-add">+ Add change order sheet</button></div>';
 html += '<div class="sec"><div class="row edit"><span class="l">Notes</span>' + input('notes') + '</div></div>';
 html += '<div class="bar"><button id="cancel">Cancel</button><button class="primary" id="save">Save</button></div>';
 return html;
@@ -182,6 +219,13 @@ el.innerHTML = editing ? editHtml() : viewHtml();
 if (editing) {
 document.getElementById('cancel').onclick = function () { editing = false; draw(); };
 document.getElementById('save').onclick = save;
+var rows = document.getElementById('corows');
+rows.onclick = function (e) { if (e.target.classList.contains('co-x')) { e.target.parentNode.remove(); t.sizeTo('#content'); } };
+document.getElementById('co-add').onclick = function () {
+rows.insertAdjacentHTML('beforeend', coRow({}));
+rows.lastElementChild.querySelector('.co-wo').focus();
+t.sizeTo('#content');
+};
 } else {
 document.getElementById('edit').onclick = function () { editing = true; draw(); };
 if (!authed) document.getElementById('allow').onclick = function () {
@@ -199,6 +243,17 @@ if (!v) return;
 // Dates are kept as noon UTC so they never shift a day in any time zone.
 next[k] = FIELDS[k].type === 'date' ? v + 'T12:00:00.000Z' : v;
 });
+var before = coSheets().map(function (c) { return c.wo; }), kept = [], attached = {};
+coFromAttachments().forEach(function (c) { attached[c.wo] = c.url; });
+next.coSheets = [];
+Array.prototype.forEach.call(document.querySelectorAll('.corow'), function (r) {
+var wo = r.querySelector('.co-wo').value.trim().replace(/^(CO|WO)\s*/i, ''), url = r.querySelector('.co-url').value.trim();
+if (!wo || !/^https?:\/\//i.test(url)) return;
+kept.push(wo);
+// Only sheets typed in by hand are saved; attached ones keep coming from the card, so a re-sent change order still updates.
+if (attached[wo] !== url) next.coSheets.push({ wo: wo, url: url });
+});
+next.coRemoved = before.filter(function (wo) { return kept.indexOf(wo) < 0; });
 // Remember what the description said at save time, so only later description changes win over these values.
 return fromDescription().then(function (seen) {
 return t.set('card', 'shared', { job: next, descSeen: seen });
@@ -294,7 +349,7 @@ function load() {
 if (editing) return t.sizeTo('#content');
 return migrateOnce().then(function () { return t.getRestApi().isAuthorized().then(function (ok) { authed = ok; }, function () {}); }).then(function () { return t.getAll(); }).then(function (all) {
 var sh = (all && all.card && all.card.shared) || {}, stored = sh.job || {}, seen = sh.descSeen || {};
-return Promise.all([fromDescription(), t.card('idList', 'checklists')]).then(function (r) {
+return Promise.all([fromDescription(), t.card('idList', 'checklists', 'attachments')]).then(function (r) {
 // Saved values win, except where n8n or the email check wrote something new to the description since the last save.
 job = {};
 Object.keys(stored).forEach(function (k) { job[k] = stored[k]; });
